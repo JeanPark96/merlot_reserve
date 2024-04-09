@@ -44,23 +44,68 @@ parser = argparse.ArgumentParser(description='Train model!')
 
 # '../../pretrain/configs/ytt180m_base_v4_bsize=1024.yaml'
 parser.add_argument(
-    'pretrain_config_file',
+    '-pretrain_config_file',
+    dest='pretrain_config_file',
+    default='/home/hlpark/merlot_reserve/pretrain/configs/tvqa_finetune_base.yaml',
     help='Where the config.yaml is located',
     type=str,
 )
+
 parser.add_argument(
-    'ckpt',
+    '-ckpt',
+    dest='ckpt',
+    default='/home/hlpark/.cache/merlotreserve/tvqa_finetune_base',
     help='checkpoint to use',
     type=str,
 )
+
+parser.add_argument(
+    '-file_path',
+    dest='file_path',
+    default='gs://merlot_test_tvqa/original_tvqa_record',
+    help='file path to data record',
+    type=str,
+)
+
+parser.add_argument(
+    '-model_mn',
+    dest='model_mn',
+    default='',
+    help='model middle name',
+    type=str,
+)
+
+parser.add_argument(
+    '-suffix',
+    dest='suffix',
+    default='new',
+    help='suffix',
+    type=str,
+)
+
 args = parser.parse_args()
+# args.pretrain_config_file='/home/hlpark/merlot_reserve/pretrain/configs/tvqa_finetune_val_orig.yaml'
+# args.ckpt='/home/hlpark/.cache/merlotreserve/tvqa_finetune_base'
+# file_path = 'gs://merlot_test_tvqa/original_tvqa_record'
+# suffix='_org'
+file_path = args.file_path
+suffix = args.suffix
+model_mn = args.model_mn
+MODEL_SIZE = "base_model"
+print(args.pretrain_config_file)
+print(args.ckpt)
+print(file_path)
+print(model_mn, suffix)
+split_temp="test"
+print(f"{file_path}/{split_temp}{model_mn}{suffix}/tvqa/{split_temp}{model_mn}" + '{:03d}of001.tfrecord')
+
 
 # print(f"Loading from {args.config_file}", flush=True)
 with open(args.pretrain_config_file, 'r') as f:
     config = yaml.load(f, yaml.FullLoader)
 
-config['data']['val_fns'] = "${path_to_tvqa}/test{:03d}of008.tfrecord"
-config['data']['num_val_files'] = 8
+config['data']['val_fns'] = f"{file_path}/test000of001.tfrecord"
+config['data']['num_val_files'] = 1
 config['data']['num_answers'] = 5
 config['data']['do_random_scale'] = False
 
@@ -78,9 +123,15 @@ seattle_time = pytz.utc.localize(datetime.utcnow()).astimezone(pytz.timezone('Am
 seattle_time = seattle_time.strftime("%Y-%m-%d-%H:%M.%S")
 
 np.random.seed(123456)
-config['model']['output_grid'] = [18, 32]
 
+if 'base'  in args.pretrain_config_file:
+    config['model']['output_grid'] = [18, 32]
+elif 'large' in args.pretrain_config_file:
+    config['model']['output_grid'] = [18, 32]
+    MODEL_SIZE = "large_model"
 
+root_path = os.path.join("/home/hlpark/merlot_reserve/finetune/tvqa/evaluation", MODEL_SIZE,  "model" + model_mn + suffix)
+print(root_path)
 config['_ckpt'] = args.ckpt
 
 class MerlotReserveTVQA(MerlotReserve):
@@ -193,9 +244,9 @@ p_pred_step = jax.pmap(pred_step, axis_name='batch', donate_argnums=(1,))
 
 out = {}
 for split in ['val', 'test']:
-    config['data']['val_fns'] = f"path_to_tvqa/{split}" + '{:03d}of008.tfrecord'
+    config['data']['val_fns'] = f"{file_path}/{split}{model_mn}{suffix}/tvqa/{split}{model_mn}" + '{:03d}of001.tfrecord'
     val_iter = finetune_val_input_fn_builder(config, 'tvqa')
-
+    print(config['data']['num_val_files'])
     for ids, batch in tqdm(val_iter):
         val_pred = p_pred_step(state, batch)
         preds_joint = val_pred['preds_joint'].reshape(-1).tolist()
@@ -208,16 +259,16 @@ for split in ['val', 'test']:
             out[(split, id_i)] = (p_t, p_a, p_j)
 
 for sub_i, submission in enumerate(['text', 'audio', 'joint']):
-    os.makedirs(submission, exist_ok=True)
+    os.makedirs(os.path.join(root_path, submission), exist_ok=True)
 
     # Make prediction_val.json
     pred_dict = {id_idx: v[sub_i] for (split, id_idx), v in out.items() if split == 'val'}
-    with open(os.path.join(submission, 'prediction_val.json'), 'w') as f:
+    with open(os.path.join(root_path, submission, 'prediction_val.json'), 'w') as f:
         json.dump(pred_dict, f)
 
     # Make prediction_val.json
     pred_dict = {id_idx: v[sub_i] for (split, id_idx), v in out.items() if split == 'test'}
-    with open(os.path.join(submission, 'prediction_test_public.json'), 'w') as f:
+    with open(os.path.join(root_path, submission, 'prediction_test_public.json'), 'w') as f:
         json.dump(pred_dict, f)
 
     model_size = 'Base' if 'base' in args.pretrain_config_file.lower() else 'Large'
@@ -230,7 +281,7 @@ for sub_i, submission in enumerate(['text', 'audio', 'joint']):
             'institution': 'Anonymous',
             'description': 'A {}-sized model, given {} at test time'.format(model_size, model_suffix.strip('()')),
             'paper_link': '', 'code_link': ''}
-    with open(os.path.join(submission, 'meta.json'), 'w') as f:
+    with open(os.path.join(root_path, submission, 'meta.json'), 'w') as f:
         json.dump(meta, f)
 
-    os.system(f'cd {submission} && zip ../{submission}.zip prediction_val.json prediction_test_public.json meta.json')
+    os.system(f'cd {(submission)} && zip ../{submission}{model_mn}{suffix}.zip prediction_val.json prediction_test_public.json meta.json')

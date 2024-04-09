@@ -951,7 +951,7 @@ class PretrainedMerlotReserve:
         import os
         import yaml
 
-        if model_name not in ('base', 'large'):
+        if model_name not in ('base', 'large', 'tvqa_finetune_base', 'tvqa_finetune_large'):
             raise ValueError("Must provide a model that is `base' or `large'")
 
         if image_grid_size not in [(18, 32), (12, 20), (24,24)]:
@@ -964,6 +964,8 @@ class PretrainedMerlotReserve:
             ('large', (18, 32,)): 'large_resadapt',
             ('base', (24, 24,)): 'base_resadapt',
             ('large', (24, 24,)): 'large_resadapt',
+            ('tvqa_finetune_base', (12, 20,)): 'tvqa_finetune_base',
+            ('tvqa_finetune_large', (18, 32,)): 'tvqa_finetune_large',
         }[model_name, image_grid_size]
 
         if cache_dir is None:
@@ -971,25 +973,27 @@ class PretrainedMerlotReserve:
         os.makedirs(cache_dir, exist_ok=True)
 
         cache_path = os.path.join(cache_dir, param_fn)
+        print(f"!!!!!!!!!!!!!!!!!!!!!{param_fn}")
+        print(f"!!!!!!!!!!!!!!!!!!!!!{cache_path}")
         if not os.path.exists(cache_path):
             try:
                 from google.cloud import storage
                 storage_client = storage.Client()
                 bucket = storage_client.bucket('merlotreserve')
                 blob = bucket.blob(f'ckpts/{param_fn}')
-                print(f"DOWNLOADING! gs://merlotreserve/ckpts/{param_fn}", flush=True)
+                print(f"DOWNLOADING! gs://merlotreserve/tvqa_ckpts/{param_fn}", flush=True)
                 blob.download_to_filename(cache_path)
             except:
                 import requests
                 print(f"DOWNLOADING {param_fn} using requests", flush=True)
-                r = requests.get(f'https://storage.googleapis.com/merlotreserve/ckpts/{param_fn}', stream=True)
+                r = requests.get(f'https://storage.googleapis.com/merlotreserve/tvqa_ckpts/{param_fn}', stream=True)
                 with open(cache_path, 'wb') as f:
                     for chunk in r.iter_content(chunk_size=1000):
                         f.write(chunk)
             print("Done downloading")
 
         params = load_checkpoint(cache_path)['params']
-
+    
         config_fn = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'pretrain', 'configs', f'{model_name}.yaml')
         with open(config_fn, 'r') as f:
             config = yaml.load(f, yaml.FullLoader)

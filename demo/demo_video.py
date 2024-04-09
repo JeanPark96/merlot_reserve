@@ -10,14 +10,15 @@ import jax
 import jax.numpy as jnp
 
 # This handles loading the model and getting the checkpoints.
+# grid_size = (12, 20)
 grid_size = (18, 32)
-model = PretrainedMerlotReserve.from_pretrained(model_name='large', image_grid_size=grid_size)
+model = PretrainedMerlotReserve.from_pretrained(model_name='tvqa_finetune_large', image_grid_size=grid_size)
 
 ## First open the video and break it up into segments. you can only have 8.
 # Each segment is 5 seconds so it corresponds to seconds 15 - 55 of the video
 
 # Feel free to change the URL!
-video_segments = video_to_segments('pmjPjZZRhNQ.mp4')
+video_segments = video_to_segments('CSI_03.15.18_Evans_03.mp4')
 video_segments = video_segments[3:11]
 
 # Set up a fake classification task.

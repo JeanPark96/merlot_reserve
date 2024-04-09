@@ -139,14 +139,14 @@ def make_spectrogram(waveform, playback_speed=1, sr=22050, pad_size=2):
     eps = 1e-1
     mel = librosa.feature.melspectrogram(waveform, **librosa_params)
     log_mel = np.log(mel + eps) - np.log(eps)
-
+    #print("LOG MEL", log_mel.shape)
     # Tack on playback speed as a (constant) feature
     log_mel = np.concatenate([log_mel, playback_speed * np.ones((1, log_mel.shape[1]), dtype=log_mel.dtype)], 0)
     log_mel = log_mel.T
 
     seq_size = 60
-    if log_mel.shape != (seq_size * 3 + pad_size * 4, 65):
-        raise ValueError("provided mel spectrogram {}. target size: {}".format(log_mel.shape, (seq_size * 3 + pad_size * 4, 65)))
+    # if log_mel.shape != (seq_size * 3 + pad_size * 4, 65):
+    #     raise ValueError("provided mel spectrogram {}. target size: {}".format(log_mel.shape, (seq_size * 3 + pad_size * 4, 65)))
 
     specs = np.stack([
         log_mel[pad_size:(pad_size + seq_size)],
