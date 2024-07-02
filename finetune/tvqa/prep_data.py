@@ -65,6 +65,15 @@ parser.add_argument(
     type=str,
     help='option for using original audio or not (audio cut off within window or audio length same as subtitle)) y/n'
 )
+
+parser.add_argument(
+    '-use_subtitle',
+    dest='use_subtitle',
+    default='y',
+    type=str,
+    help='option for using subtitle or not y/n'
+)
+
 """
 Must set things up like this in the data_dir
 drwxr-xr-x 1 rowan rowan    1155072 Aug 19  2018 tvqa_subtitles
@@ -300,7 +309,7 @@ def parse_item(item, adjusted_seg_count, analysis_list):
                 times_used.append(trow)
             else:
                 print(f"{fn} doesn't exist")
-
+        
     # Get subtitles
     #############################################################
     show_subname = item['vid_name']
@@ -328,7 +337,8 @@ def parse_item(item, adjusted_seg_count, analysis_list):
                 sub_start_time = start_time
             if sub_end_time < end_time:
                 sub_end_time =  end_time
-            times_used[pos-1]['sub'].append(sub_item.text)
+            if args.use_subtitle == 'y':
+                times_used[pos-1]['sub'].append(sub_item.text)
             #print(f"inserted: {times_used[pos-1]['start_time']} : {times_used[pos-1]['end_time']}")
     if sub_start_time > sub_end_time:
         if sub_start_time != max_time:
@@ -370,6 +380,7 @@ def parse_item(item, adjusted_seg_count, analysis_list):
         ts0 = sub_start_time
         ts1 = sub_end_time
 
+
     # Before we were sampling at 22050, and we had 188 mel windows for 5 sec.
     # now we want exactly 180 windows from 4.6667 sec.
     # 4.66667 * sr / 180 = 5 * 22050 / 188
@@ -377,9 +388,12 @@ def parse_item(item, adjusted_seg_count, analysis_list):
         #segment_size = 1
         print(f"segment size is 0 {segment_size} {ts0} {ts1}")
         return None, None, None, None
-    sampling_rate = 5 * 22050 / 188 * 180 / segment_size
-    #sampling_rate =22620
-    sampling_rate = np.floor(sampling_rate)
+    if args.audio_cut == "f":
+        sampling_rate = 22620
+    else:
+        sampling_rate = 5 * 22050 / 188 * 180 / segment_size
+        #sampling_rate =22620
+        sampling_rate = np.floor(sampling_rate)
     #print(sampling_rate, segment_size)
     ffmpeg_process = subprocess.Popen(['ffmpeg', '-y', '-i', audio_fn_mp3, '-ac', '1', '-ar', f"{sampling_rate}",
                                        audio_fn], stdout=-1, stderr=-1, text=True)
@@ -407,15 +421,25 @@ def parse_item(item, adjusted_seg_count, analysis_list):
 
     # Pad to max time just in case
     #print(times_used)
-    desired_final_frame = int(sr * max([t['end_time'] for t in times_used]))
+    if args.audio_cut == "f":
+        desired_final_frame = int(sr * max(max([t['start_time'] + 4.66667 for t in times_used]), max_time))
+    else:
+        desired_final_frame = int(sr * max([t['end_time'] for t in times_used]))
     if waveform.size < desired_final_frame:
         waveform = np.concatenate([waveform, np.zeros(desired_final_frame - waveform.size, dtype=np.float32)], 0)
 
     # Process each segment. here i'm always using a playback_speed of 1 (aka no fast forwarding).
     spectrograms = []
+    start_idx, end_idx = -1, -1
     for ts_group in times_used:
-        start_idx = int(sr * ts_group['start_time'])
-        end_idx = int(sr * ts_group['end_time'])
+        if args.audio_cut == "f":
+            if ts_group['start_time'] + 4.66667 > max_time:
+                start_idx = int(sr * (max_time - 4.66667))
+                #print(start_idx, max_time)
+                end_idx = int(sr * max_time)
+        else:
+            start_idx = int(sr * ts_group['start_time'])
+            end_idx = int(sr * ts_group['end_time'])
         #print(start_idx, end_idx)
         #print(end_idx - start_idx)
         if start_idx < 0:
@@ -444,7 +468,7 @@ def parse_item(item, adjusted_seg_count, analysis_list):
         frames.append(frames[-1])
         spectrograms.append(spectrograms[-1])
         times_used.append({'start_time': -1, 'end_time': -1, 'sub': ''})
-
+    #print(times_used)
     return qa_item, frames, spectrograms, times_used
 
 num_written = 0
@@ -536,10 +560,12 @@ else:
 
 if args.audio_cut == "y":
     suffix += "_audiocut"
-else:
+elif args.audio_cut == "n":
     suffix += "_subalignaud"
+elif args.audio_cut == "f":
+    suffix += "_audiofixed"
 
 filename = split_fn.split("/")[-1].replace("jsonl", "")
 file_name = filename + suffix
-with open(os.path.join("/home/hlpark/merlot_reserve/finetune/tvqa/evaluation/record_log", file_name + ".json"), "w") as f:
+with open(os.path.join("/home/hlpark/REDUCE/REDUCE_benchmarks/merlot_reserve/finetune/tvqa/evaluation/record_log", file_name + ".json"), "w") as f:
     f.write(json.dumps(analysis_list))

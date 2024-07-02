@@ -130,7 +130,7 @@ elif 'large' in args.pretrain_config_file:
     config['model']['output_grid'] = [18, 32]
     MODEL_SIZE = "large_model"
 
-root_path = os.path.join("/home/hlpark/merlot_reserve/finetune/tvqa/evaluation", MODEL_SIZE,  "model" + model_mn + suffix)
+root_path = os.path.join("/home/hlpark/REDUCE/REDUCE_benchmarks/merlot_reserve/finetune/tvqa/evaluation", MODEL_SIZE,  "model" + model_mn + suffix)
 print(root_path)
 config['_ckpt'] = args.ckpt
 

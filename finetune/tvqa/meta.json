@@ -1,0 +1,1 @@
+{"model_name": "MerlotReserve-Large (subtitles and audio)", "is_ensemble": false, "with_ts": true, "show_on_leaderboard": true, "author": "Anonymous", "institution": "Anonymous", "description": "A Large-sized model, given subtitles and audio at test time", "paper_link": "", "code_link": ""}
